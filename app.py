@@ -7,6 +7,10 @@ import re
 from questions import QUIZ_QUESTIONS
 from dotenv import load_dotenv
 import google.genai as genai
+from langchain_community.document_loaders import PyPDFDirectoryLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_openai import OpenAIEmbeddings
+from langchain_community.vectorstores import FAISS
 
 load_dotenv()
 client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
@@ -15,6 +19,47 @@ DOCUMENTS_DIR = "documents"
 DELAY_BETWEEN_REQUESTS = 0.5
 MAX_RETRIES = 3
 RETRY_DELAY = 2
+
+# Initialize vectorstore for document search
+@st.cache_resource
+def load_vectorstore():
+    """Load and prepare ISTQ documents vectorstore"""
+    try:
+        openai_key = os.environ.get('OPENAI_API_KEY')
+        if not openai_key:
+            return None
+        
+        # Load PDFs
+        loader = PyPDFDirectoryLoader("documents")
+        documents = loader.load()
+        
+        # Chunk documents
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=800,
+            chunk_overlap=50
+        )
+        chunks = text_splitter.split_documents(documents)
+        
+        # Create vectorstore
+        embeddings = OpenAIEmbeddings(api_key=openai_key)
+        vectorstore = FAISS.from_documents(chunks, embeddings)
+        
+        return vectorstore
+    except Exception as e:
+        print(f"Error loading vectorstore: {e}")
+        return None
+
+def find_related_documents(question, vectorstore, k=4):
+    """Find related documents for a given question"""
+    if not vectorstore:
+        return []
+    
+    try:
+        results = vectorstore.similarity_search(question, k=k)
+        return results
+    except Exception as e:
+        print(f"Error searching documents: {e}")
+        return []
 
 
 def strip_image_markdown(text):
@@ -246,9 +291,18 @@ def display_quiz():
     # Display explanations side by side when answer is submitted
     if st.session_state.get("answer_submitted", False):
         st.markdown("---")
-        st.subheader("📖 Explanations")
+        st.subheader("📖 Explanations & ISTQ Sources")
         
-        exp_col1, exp_col2 = st.columns(2, gap="small")
+        # Load vectorstore and find related documents
+        vectorstore = load_vectorstore()
+        related_docs = find_related_documents(question_data["question"], vectorstore, k=2)
+        
+        if related_docs:
+            # 3-column layout: Default | AI | Related Documents
+            exp_col1, exp_col2, exp_col3 = st.columns(3, gap="small")
+        else:
+            # 2-column layout if no related documents
+            exp_col1, exp_col2 = st.columns(2, gap="small")
         
         with exp_col1:
             render_explanation_box(
@@ -271,6 +325,30 @@ def display_quiz():
                 )
             elif not ai_explanation:
                 st.info("🔄 AI explanation generation is loading...")
+        
+        # Display related ISTQ documents if found
+        if related_docs:
+            with exp_col3:
+                st.markdown("<div style='background-color: #fff3e0; padding: 20px; border-radius: 8px; border-left: 4px solid #ff9800;'><h3 style='margin-top: 0; margin-bottom: 20px; color: #ff9800;'>📖 ISTQ Syllabus Sources</h3>", unsafe_allow_html=True)
+                
+                for idx, doc in enumerate(related_docs, 1):
+                    st.markdown(f"<div style='margin-bottom: 10px;'>", unsafe_allow_html=True)
+                    with st.expander(f"Source {idx} - Page {doc.metadata.get('page', 'N/A')}", expanded=(idx==1)):
+                        st.markdown(f"**File:** {doc.metadata.get('source', 'Unknown').split('/')[-1]}")
+                        st.markdown(f"**Page:** {doc.metadata.get('page', 'N/A')}")
+                        st.markdown("---")
+                        st.text(doc.page_content[:300] + "..." if len(doc.page_content) > 300 else doc.page_content)
+                    st.markdown("</div>", unsafe_allow_html=True)
+                
+                st.markdown("</div>", unsafe_allow_html=True)
+        else:
+            # Show message when no related documents found (only if we have 3 columns)
+            if 'exp_col3' in locals():
+                with exp_col3:
+                    st.markdown("<div style='background-color: #f5f5f5; padding: 15px; border-radius: 8px; border-left: 4px solid #999;'>", unsafe_allow_html=True)
+                    st.markdown("### 📖 ISTQ Syllabus Sources")
+                    st.info("📌 No specific ISTQ syllabus sections found for this question. Review the default and AI explanations above.")
+                    st.markdown("</div>", unsafe_allow_html=True)
         
         st.markdown("---")
     
