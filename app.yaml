@@ -1,0 +1,22 @@
+runtime: custom
+env: flex
+
+# Environment variables (set in Google Cloud instead)
+env_variables:
+  # These should be set via Google Cloud Secret Manager or Cloud Run environment
+  STREAMLIT_SERVER_PORT: "8080"
+  STREAMLIT_SERVER_HEADLESS: "true"
+
+# Auto-scaling configuration
+automatic_scaling:
+  min_instances: 1
+  max_instances: 10
+  cool_down_period_sec: 300
+  cpu_utilization:
+    target_utilization: 0.65
+
+# Resources
+resources:
+  cpu: 2
+  memory_gb: 2
+  disk_size_gb: 10

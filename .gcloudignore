@@ -1,0 +1,26 @@
+# Standard ignores
+.git
+.gitignore
+.gcloud/
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+.env.local
+
+# Optional project files
+.DS_Store
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Test and development files
+test.ipynb
+*.log
+.pytest_cache/
+.coverage
