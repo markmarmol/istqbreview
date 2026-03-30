@@ -20,9 +20,8 @@ COPY app.py .
 COPY questions.py .
 COPY query_app.py .
 
-# Copy documents and faiss index
-COPY documents/ ./documents/
-COPY faiss_index/ ./faiss_index/
+# Copy all remaining files
+COPY . .
 
 # Expose port 8080 (required by Cloud Run)
 EXPOSE 8080
